@@ -46,6 +46,7 @@ def safe_post(scraper, url, **kwargs):
     return resp
 
 def fetch_and_print_shifts():
+    print("try it)
     scraper = cloudscraper.create_scraper()
 
     # 1. تسجيل الدخول
@@ -205,7 +206,7 @@ def main():
         current_minute = now.minute
 
         # نفس الشرط الأصلي بالضبط
-        if current_hour == 13 and current_minute < 55 and last_printed_date != current_date:
+        if current_hour == 14 and current_minute < 30 and last_printed_date != current_date:
             print(f"\n[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
             print("-" * 60)
             success = fetch_and_print_shifts()
