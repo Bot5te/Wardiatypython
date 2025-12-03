@@ -46,7 +46,7 @@ def safe_post(scraper, url, **kwargs):
     return resp
 
 def fetch_and_print_shifts():
-    print("try it)
+    print("try it")
     scraper = cloudscraper.create_scraper()
 
     # 1. تسجيل الدخول
