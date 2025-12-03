@@ -205,7 +205,7 @@ def main():
         current_minute = now.minute
 
         # نفس الشرط الأصلي بالضبط
-        if current_hour == 8 and current_minute < 45 and last_printed_date != current_date:
+        if current_hour == 13 and current_minute < 55 and last_printed_date != current_date:
             print(f"\n[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
             print("-" * 60)
             success = fetch_and_print_shifts()
@@ -213,7 +213,7 @@ def main():
             if success:
                 last_printed_date = current_date
 
-        time.sleep(9)
+        time.sleep(20)
 
 if __name__ == "__main__":
     server()
