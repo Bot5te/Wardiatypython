@@ -88,8 +88,7 @@ def fetch_and_print_shifts():
     log.info("=== بدء جلب ورديات الغد ===")
 
     # أقوى إصدار حاليًا ضد Cloudflare (ديسمبر 2025)
-    session = requests.Session(impersonate="chrome124", timeout=30)
-
+    session = requests.Session(impersonate="chrome130")
     # نضيف headers مصرية عشان يبدو طبيعي أكتر
     session.headers.update({
         'Accept-Language': 'ar-EG,ar;q=0.9,en;q=0.8',
