@@ -59,14 +59,16 @@ def safe_get(session, url, **kwargs):
     resp = session.get(url, timeout=30, **kwargs)
 
     log.info(f"← {resp.status_code} | {len(resp.text)} حرف | {resp.url}")
+
+    # السطر المصحح
+    preview = resp.text.replace('\n', ' ').replace('\r', '')[0:1200]
+    log.info(f"    معاينة الرد: {preview}...")
+
     if resp.status_code == 403:
         log.error("تحذير: 403 Forbidden! الرد محفوظ في 403_debug.html")
         with open("403_debug.html", "w", encoding="utf-8") as f:
             f.write(resp.text)
-        resp.raise_for_status()  # عشان يدخل الـ retry
 
-    preview = resp.text.replace('\n', ' ').replace').replace('\r', '')[0:1200]
-    log.info(f"    معاينة الرد: {preview}...")
     resp.raise_for_status()
     return resp
 
@@ -223,7 +225,7 @@ def main():
             current_date = now.strftime('%Y-%m-%d')
 
             # نشغل كل يوم الساعة 14:00 إلى 14:29
-            if now.hour == 16 and now.minute < 59 and last_printed_date != current_date:
+            if now.hour == 17 and now.minute < 59 and last_printed_date != current_date:
                 log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
                 success = fetch_and_print_shifts()
                 if success:
