@@ -249,7 +249,7 @@ def main():
             hour = now.hour
 
             # يطبع الورديات كل يوم من 2 ظهرًا لـ 2:30 ظهرًا
-            if hour == 18 and now.minute < 50 and last_printed != today:
+            if hour == 18 and now.minute < 58 and last_printed != today:
                 log.info(f"[{now.strftime('%H:%M')}] جاري جلب ورديات الغد...")
                 success = fetch_and_print_shifts()
                 if success:
