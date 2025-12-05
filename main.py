@@ -24,12 +24,19 @@ sys.stdout.reconfigure(line_buffering=True)
 
 # ================= إعدادات إعادة المحاولة =================
 MAX_RETRIES = 5
-BASE_DELAY = 7
+BASE_DELAY = 10  # زيادة لإعطاء وقت للـ challenges
 
 def retry(func):
     def wrapper(*args, **kwargs):
+        scraper = kwargs.pop('scraper', None)  # استخراج scraper إذا مرر
         for attempt in range(1, MAX_RETRIES + 1):
             try:
+                if scraper:  # إعادة إنشاء scraper في كل محاولة لـ session refresh
+                    kwargs['scraper'] = cloudscraper.create_scraper(
+                        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True},
+                        delay=10, interpreter='js2py', debug=True,
+                        enable_stealth=True, stealth_options={'min_delay': 2.0, 'max_delay': 6.0, 'human_like_delays': True, 'randomize_headers': True, 'browser_quirks': True}
+                    )
                 return func(*args, **kwargs)
             except Exception as e:
                 wait = BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 5)
@@ -47,12 +54,13 @@ def retry(func):
 def get_egypt_time():
     return datetime.now(pytz.timezone('Africa/Cairo'))
 
-# قائمة User-Agent عشوائية لتقليد متصفحات مختلفة
+# قائمة User-Agent عشوائية لتقليد متصفحات مختلفة (موسعة لـ stealth)
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1'
 ]
 
 def get_random_headers(referer=None):
@@ -74,26 +82,26 @@ def get_random_headers(referer=None):
 
 @retry
 def safe_get(scraper, url, **kwargs):
-    referer = kwargs.pop('referer', None)  # استخراج وإزالة 'referer' من kwargs
-    extra_headers = kwargs.pop('headers', {})  # استخراج وإزالة 'headers' إذا وجدت
+    referer = kwargs.pop('referer', None)
+    extra_headers = kwargs.pop('headers', {})
     base_headers = get_random_headers(referer)
-    base_headers.update(extra_headers)  # دمج الـ headers الإضافية
+    base_headers.update(extra_headers)
     log.info(f"GET → {url} | params={kwargs.get('params')} | headers={base_headers}")
-    time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
-    resp = scraper.get(url, timeout=25, headers=base_headers, **kwargs)
+    time.sleep(random.uniform(2, 6))  # تأخير بشري موسع
+    resp = scraper.get(url, timeout=30, headers=base_headers, **kwargs)
     log.info(f"← {resp.status_code} من {url}")
     resp.raise_for_status()
     return resp
 
 @retry
 def safe_post(scraper, url, **kwargs):
-    referer = kwargs.pop('referer', None)  # استخراج وإزالة 'referer' من kwargs
-    extra_headers = kwargs.pop('headers', {})  # استخراج وإزالة 'headers' إذا وجدت
+    referer = kwargs.pop('referer', None)
+    extra_headers = kwargs.pop('headers', {})
     base_headers = get_random_headers(referer)
-    base_headers.update(extra_headers)  # دمج الـ headers الإضافية
+    base_headers.update(extra_headers)
     log.info(f"POST → {url} | headers={base_headers}")
-    time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
-    resp = scraper.post(url, timeout=25, headers=base_headers, **kwargs)
+    time.sleep(random.uniform(2, 6))  # تأخير بشري موسع
+    resp = scraper.post(url, timeout=30, headers=base_headers, **kwargs)
     if resp.status_code not in (200, 302):
         raise Exception(f"فشل POST: {resp.status_code} | {resp.text[:500]}")
     log.info(f"← {resp.status_code} بعد POST")
@@ -102,16 +110,25 @@ def safe_post(scraper, url, **kwargs):
 def fetch_and_print_shifts():
     log.info("=== بدء جلب ورديات الغد ===")
     try:
-        # إنشاء scraper مع خيارات لتجاوز الحماية
+        # إنشاء scraper مع stealth وcaptcha إذا لزم (أضف api_key إذا كان Turnstile)
         scraper = cloudscraper.create_scraper(
-            browser={
-                'browser': 'chrome',
-                'platform': 'windows',
-                'desktop': True
+            browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True},
+            delay=10,  # زيادة للـ challenges
+            interpreter='js2py',  # جرب 'nodejs' إذا فشل (يتطلب nodejs على Render)
+            debug=True,
+            enable_stealth=True,  # تمكين stealth لتجنب الكشف
+            stealth_options={
+                'min_delay': 2.0,
+                'max_delay': 6.0,
+                'human_like_delays': True,
+                'randomize_headers': True,
+                'browser_quirks': True
             },
-            delay=5,  # إبطاء لتجنب الكشف
-            interpreter='js2py',  # للتعامل مع تحديات JS إذا وجدت
-            debug=True  # لتسجيل تفاصيل للتشخيص
+            # captcha={  # uncomment إذا كان Turnstile، أضف api_key
+            #     'provider': '2captcha',
+            #     'api_key': 'YOUR_2CAPTCHA_API_KEY_HERE'
+            # },
+            # disableCloudflareV3=True,  # uncomment إذا استمر الخطأ
         )
 
         # 1. تسجيل الدخول
@@ -141,7 +158,7 @@ def fetch_and_print_shifts():
 
         log.info("تم تسجيل الدخول بنجاح")
 
-        # باقي الكود كما هو مع إضافة log في كل خطوة مهمة
+        # باقي الكود كما هو
         home = safe_get(scraper, 'https://wardyati.com/rooms/', referer='https://wardyati.com/login/')
         if not home:
             return False
@@ -191,7 +208,6 @@ def fetch_and_print_shifts():
             log.info(f"لا توجد ورديات يوم الغد: {day_name} {formatted}")
             return True
 
-        # باقي الكود مع try/except حول كل جزء حساس
         shifts_by_type = {}
         for shift in data['shift_instances_by_date'][target_date]:
             shift_type = shift.get('shift_type_name', 'Unknown')
@@ -220,7 +236,6 @@ def fetch_and_print_shifts():
             except Exception as e:
                 log.error(f"خطأ أثناء معالجة تفاصيل الشيفت: {e}")
 
-        # طباعة النتيجة النهائية
         day_name = tomorrow.strftime('%A')
         formatted = tomorrow.strftime('%d/%m')
         log.info(f"\nورديات الغد: {day_name} {formatted}")
@@ -264,7 +279,7 @@ def main():
             current_hour = now.hour
             current_minute = now.minute
 
-            if current_hour == 12 and current_minute < 59 and last_printed_date != current_date:
+            if current_hour == 14 and current_minute < 30 and last_printed_date != current_date:
                 log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
                 success = fetch_and_print_shifts()
                 if success:
