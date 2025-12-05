@@ -223,7 +223,7 @@ def main():
             current_date = now.strftime('%Y-%m-%d')
 
             # نشغل كل يوم الساعة 14:00 إلى 14:29
-            if now.hour == 14 and now.minute < 30 and last_printed_date != current_date:
+            if now.hour == 16 and now.minute < 59 and last_printed_date != current_date:
                 log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
                 success = fetch_and_print_shifts()
                 if success:
