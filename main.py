@@ -402,7 +402,7 @@ def main():
                 log.info(f"[{now.strftime('%H:%M:%S')}] البوت شغال...")
 
             # تشغيل الساعة 2:30 مساءً
-            if (current_hour == 14 and current_minute >= 30) or \
+            if (current_hour == 1 and current_minute >= 3) or \
                (current_hour == 15 and current_minute < 5):
                 if last_printed_date != current_date:
                     log.info(f"[{now.strftime('%H:%M:%S')}] ⏰ وقت جلب ورديات الغد...")
