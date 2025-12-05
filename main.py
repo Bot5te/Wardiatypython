@@ -74,7 +74,8 @@ def get_random_headers(referer=None):
 
 @retry
 def safe_get(scraper, url, **kwargs):
-    headers = get_random_headers(kwargs.get('referer'))
+    referer = kwargs.pop('referer', None)  # استخراج وإزالة 'referer' من kwargs
+    headers = get_random_headers(referer)
     log.info(f"GET → {url} | params={kwargs.get('params')} | headers={headers}")
     time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
     resp = scraper.get(url, timeout=25, headers=headers, **kwargs)
@@ -84,7 +85,8 @@ def safe_get(scraper, url, **kwargs):
 
 @retry
 def safe_post(scraper, url, **kwargs):
-    headers = get_random_headers(kwargs.get('referer'))
+    referer = kwargs.pop('referer', None)  # استخراج وإزالة 'referer' من kwargs
+    headers = get_random_headers(referer)
     log.info(f"POST → {url} | headers={headers}")
     time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
     resp = scraper.post(url, timeout=25, headers=headers, **kwargs)
@@ -258,7 +260,7 @@ def main():
             current_hour = now.hour
             current_minute = now.minute
 
-            if current_hour == 11 and current_minute < 59 and last_printed_date != current_date:
+            if current_hour == 14 and current_minute < 30 and last_printed_date != current_date:
                 log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
                 success = fetch_and_print_shifts()
                 if success:
