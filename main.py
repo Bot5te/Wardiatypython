@@ -75,10 +75,12 @@ def get_random_headers(referer=None):
 @retry
 def safe_get(scraper, url, **kwargs):
     referer = kwargs.pop('referer', None)  # استخراج وإزالة 'referer' من kwargs
-    headers = get_random_headers(referer)
-    log.info(f"GET → {url} | params={kwargs.get('params')} | headers={headers}")
+    extra_headers = kwargs.pop('headers', {})  # استخراج وإزالة 'headers' إذا وجدت
+    base_headers = get_random_headers(referer)
+    base_headers.update(extra_headers)  # دمج الـ headers الإضافية
+    log.info(f"GET → {url} | params={kwargs.get('params')} | headers={base_headers}")
     time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
-    resp = scraper.get(url, timeout=25, headers=headers, **kwargs)
+    resp = scraper.get(url, timeout=25, headers=base_headers, **kwargs)
     log.info(f"← {resp.status_code} من {url}")
     resp.raise_for_status()
     return resp
@@ -86,10 +88,12 @@ def safe_get(scraper, url, **kwargs):
 @retry
 def safe_post(scraper, url, **kwargs):
     referer = kwargs.pop('referer', None)  # استخراج وإزالة 'referer' من kwargs
-    headers = get_random_headers(referer)
-    log.info(f"POST → {url} | headers={headers}")
+    extra_headers = kwargs.pop('headers', {})  # استخراج وإزالة 'headers' إذا وجدت
+    base_headers = get_random_headers(referer)
+    base_headers.update(extra_headers)  # دمج الـ headers الإضافية
+    log.info(f"POST → {url} | headers={base_headers}")
     time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
-    resp = scraper.post(url, timeout=25, headers=headers, **kwargs)
+    resp = scraper.post(url, timeout=25, headers=base_headers, **kwargs)
     if resp.status_code not in (200, 302):
         raise Exception(f"فشل POST: {resp.status_code} | {resp.text[:500]}")
     log.info(f"← {resp.status_code} بعد POST")
@@ -260,7 +264,7 @@ def main():
             current_hour = now.hour
             current_minute = now.minute
 
-            if current_hour == 11 and current_minute < 59 and last_printed_date != current_date:
+            if current_hour == 12 and current_minute < 59 and last_printed_date != current_date:
                 log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
                 success = fetch_and_print_shifts()
                 if success:
