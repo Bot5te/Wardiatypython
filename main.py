@@ -258,7 +258,7 @@ def main():
             current_hour = now.hour
             current_minute = now.minute
 
-            if current_hour == 14 and current_minute < 30 and last_printed_date != current_date:
+            if current_hour == 11 and current_minute < 59 and last_printed_date != current_date:
                 log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
                 success = fetch_and_print_shifts()
                 if success:
