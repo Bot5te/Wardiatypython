@@ -8,28 +8,19 @@ import time
 import random
 import logging
 import traceback
-import requests  # إضافة لـ fallback
 from app import server 
 
-# ================= إعداد Logging =================
+# ================= إعداد Logging ليعمل ممتاز على Render =================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)s | %(message)s',
     datefmt='%H:%M:%S'
 )
 log = logging.getLogger(__name__)
+
+# لضمان ظهور كل شيء في Render Logs حتى لو كان هناك buffering
 import sys
 sys.stdout.reconfigure(line_buffering=True)
-
-# ================= Headers مخصصة =================
-custom_headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Referer': 'https://wardyati.com/',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-}
 
 # ================= إعدادات إعادة المحاولة =================
 MAX_RETRIES = 5
@@ -56,50 +47,69 @@ def retry(func):
 def get_egypt_time():
     return datetime.now(pytz.timezone('Africa/Cairo'))
 
+# قائمة User-Agent عشوائية لتقليد متصفحات مختلفة
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+]
+
+def get_random_headers(referer=None):
+    headers = {
+        'User-Agent': random.choice(USER_AGENTS),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1'
+    }
+    if referer:
+        headers['Referer'] = referer
+    return headers
+
 @retry
 def safe_get(scraper, url, **kwargs):
-    log.info(f"GET → {url} | params={kwargs.get('params')}")
-    try:
-        resp = scraper.get(url, timeout=25, headers=custom_headers, **kwargs)
-        log.info(f"← {resp.status_code} من {url} | رد خام: {resp.text[:500]}")  # طباعة جزء من الرد للتشخيص
-        resp.raise_for_status()
-        return resp
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 403:
-            log.error(f"403 Forbidden: ربما IP محظورة أو حماية. جرب headers مختلفة.")
-            log.error(f"رد الخطأ الكامل: {e.response.text}")
-        raise
+    headers = get_random_headers(kwargs.get('referer'))
+    log.info(f"GET → {url} | params={kwargs.get('params')} | headers={headers}")
+    time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
+    resp = scraper.get(url, timeout=25, headers=headers, **kwargs)
+    log.info(f"← {resp.status_code} من {url}")
+    resp.raise_for_status()
+    return resp
 
 @retry
 def safe_post(scraper, url, **kwargs):
-    log.info(f"POST → {url}")
-    resp = scraper.post(url, timeout=25, headers=custom_headers, **kwargs)
+    headers = get_random_headers(kwargs.get('referer'))
+    log.info(f"POST → {url} | headers={headers}")
+    time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
+    resp = scraper.post(url, timeout=25, headers=headers, **kwargs)
     if resp.status_code not in (200, 302):
-        log.error(f"فشل POST: {resp.status_code} | رد: {resp.text[:500]}")
-        raise Exception(f"فشل POST: {resp.status_code}")
+        raise Exception(f"فشل POST: {resp.status_code} | {resp.text[:500]}")
     log.info(f"← {resp.status_code} بعد POST")
     return resp
 
 def fetch_and_print_shifts():
     log.info("=== بدء جلب ورديات الغد ===")
     try:
-        # تحسين cloudscraper مع خيارات لتجاوز
+        # إنشاء scraper مع خيارات لتجاوز الحماية
         scraper = cloudscraper.create_scraper(
-            browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False},  # محاكاة متصفح حقيقي
-            delay=10,  # delay لتجنب rate limiting
-            captcha={'provider': 'return_response'}  # إذا كان captcha، لكن نادراً
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'desktop': True
+            },
+            delay=5,  # إبطاء لتجنب الكشف
+            interpreter='js2py',  # للتعامل مع تحديات JS إذا وجدت
+            debug=True  # لتسجيل تفاصيل للتشخيص
         )
 
-        # 1. تسجيل الدخول (مع fallback إذا فشل cloudscraper)
-        try:
-            login_page = safe_get(scraper, 'https://wardyati.com/login/')
-        except:
-            log.warning("فشل cloudscraper، جرب fallback مع requests عادي...")
-            session = requests.Session()
-            session.headers.update(custom_headers)
-            login_page = session.get('https://wardyati.com/login/', timeout=25)
-            login_page.raise_for_status()
-
+        # 1. تسجيل الدخول
+        login_page = safe_get(scraper, 'https://wardyati.com/login/', referer='https://wardyati.com/')
         if not login_page:
             return False
 
@@ -117,7 +127,7 @@ def fetch_and_print_shifts():
         }
 
         login_resp = safe_post(scraper, 'https://wardyati.com/login/', data=login_data,
-                               headers={'Referer': 'https://wardyati.com/login/'}, allow_redirects=True)
+                               referer='https://wardyati.com/login/', allow_redirects=True)
         if not login_resp or 'ممنوع' in login_resp.text or '403' in login_resp.text:
             log.error("فشل تسجيل الدخول - ربما تم حظر الـ IP أو تغيّر الكود")
             log.error(f"جزء من الرد: {login_resp.text[:1000]}")
@@ -125,14 +135,13 @@ def fetch_and_print_shifts():
 
         log.info("تم تسجيل الدخول بنجاح")
 
-        # باقي الكود كما هو الأصلي، مع إضافة headers في كل safe_get/safe_post
-
-        home = safe_get(scraper, 'https://wardyati.com/rooms/')
+        # باقي الكود كما هو مع إضافة log في كل خطوة مهمة
+        home = safe_get(scraper, 'https://wardyati.com/rooms/', referer='https://wardyati.com/login/')
         if not home:
             return False
 
         soup = BeautifulSoup(home.text, 'html.parser')
-        target_text = 'شيفتات جراحة غدد شهر 12'  
+        target_text = 'شيفتات جراحة غدد شهر 12'
         room_link = None
         for div in soup.find_all('div', class_='overflow-wrap'):
             if target_text in div.text.strip():
@@ -145,7 +154,7 @@ def fetch_and_print_shifts():
                         break
 
         if not room_link:
-            log.error("لم يتم العثور على الغرفة - تأكد من النص")
+            log.error("لم يتم العثور على الغرفة - تأكد من النص 'شيفتات جراحة غدد شهر 12'")
             return False
 
         tomorrow = get_egypt_time() + timedelta(days=1)
@@ -158,15 +167,16 @@ def fetch_and_print_shifts():
             'view': 'monthly',
             'year': target_year,
             'month': target_month
-        })
+        }, referer=room_link)
         if not arena_resp:
             return False
 
         try:
             data = json.loads(arena_resp.text)
-            log.info(f"تم جلب بيانات الشهر بنجاح")
+            log.info(f"تم جلب بيانات الشهر بنجاح - عدد الأيام: {len(data.get('shift_instances_by_date', {}))}")
         except Exception as e:
-            log.error(f"فشل تحليل JSON: {e}")
+            log.error(f"فشل تحليل JSON من arena: {e}")
+            log.error(f"الرد الخام: {arena_resp.text[:1000]}")
             return False
 
         if target_date not in data.get('shift_instances_by_date', {}):
@@ -175,12 +185,13 @@ def fetch_and_print_shifts():
             log.info(f"لا توجد ورديات يوم الغد: {day_name} {formatted}")
             return True
 
+        # باقي الكود مع try/except حول كل جزء حساس
         shifts_by_type = {}
         for shift in data['shift_instances_by_date'][target_date]:
             shift_type = shift.get('shift_type_name', 'Unknown')
             details_url = urljoin('https://wardyati.com/', shift['get_shift_instance_details_url'])
 
-            details_resp = safe_get(scraper, details_url, headers={'HX-Request': 'true'})
+            details_resp = safe_get(scraper, details_url, headers={'HX-Request': 'true'}, referer=arena_url)
             if not details_resp:
                 continue
 
@@ -192,7 +203,7 @@ def fetch_and_print_shifts():
                     member_url = h.get('urls', {}).get('get_member_info')
                     if member_url:
                         mem_resp = safe_get(scraper, urljoin('https://wardyati.com/', member_url),
-                                            headers={'HX-Request': 'true'})
+                                            headers={'HX-Request': 'true'}, referer=details_url)
                         if mem_resp:
                             try:
                                 mdata = json.loads(mem_resp.text)
@@ -201,57 +212,41 @@ def fetch_and_print_shifts():
                                 pass
                     shifts_by_type.setdefault(shift_type, []).append({'name': name, 'phone': phone})
             except Exception as e:
-                log.error(f"خطأ في تفاصيل الشيفت: {e}")
+                log.error(f"خطأ أثناء معالجة تفاصيل الشيفت: {e}")
 
-        # طباعة النتيجة
-        if shifts_by_type:
-            day_name = tomorrow.strftime('%A')
-            formatted = tomorrow.strftime('%d/%m')
-            log.info(f"\nورديات الغد: {day_name} {formatted}")
-            log.info("=" * 50)
+        # طباعة النتيجة النهائية
+        day_name = tomorrow.strftime('%A')
+        formatted = tomorrow.strftime('%d/%m')
+        log.info(f"\nورديات الغد: {day_name} {formatted}")
+        log.info("=" * 50)
 
-            order = ['Day', 'Day Work', 'Night']
-            printed = set()
+        order = ['Day', 'Day Work', 'Night']
+        printed = set()
 
-            for st in order:
-                if st in shifts_by_type:
-                    log.info(f"\n{st}")
-                    seen = set()
-                    for p in shifts_by_type[st]:
-                        key = (p['name'], p['phone'])
-                        if key not in seen:
-                            seen.add(key)
-                            log.info(f'"{p["name"]}')
-                            if p['phone']:
-                                log.info(f'({p["phone"]})')
-                    printed.add(st)
+        for st in order + list(shifts_by_type.keys()):
+            if st in shifts_by_type and st not in printed:
+                log.info(f"\n{st}")
+                seen = set()
+                for p in shifts_by_type[st]:
+                    key = (p['name'], p['phone'])
+                    if key not in seen:
+                        seen.add(key)
+                        log.info(f'"{p["name"]}')
+                        if p['phone']:
+                            log.info(f'({p["phone"]})')
+                printed.add(st)
 
-            for st in shifts_by_type:
-                if st not in printed:
-                    log.info(f"\n{st}")
-                    seen = set()
-                    for p in shifts_by_type[st]:
-                        key = (p['name'], p['phone'])
-                        if key not in seen:
-                            seen.add(key)
-                            log.info(f'"{p["name"]}')
-                            if p['phone']:
-                                log.info(f'({p["phone"]})')
-
-            log.info("=" * 50)
-        else:
-            log.info("لا توجد بيانات ورديات الغد")
-
+        log.info("=" * 50)
         return True
 
     except Exception as e:
-        log.error("خطأ غير متوقع:")
+        log.error("خطأ غير متوقع في fetch_and_print_shifts:")
         log.error(traceback.format_exc())
         return False
 
 # ================= الحلقة الرئيسية =================
 def main():
-    log.info("البوت شغال الآن")
+    log.info("البوت شغال الآن - يطبع ورديات الغد يوميًا")
     log.info("-" * 70)
 
     last_printed_date = None
@@ -263,8 +258,8 @@ def main():
             current_hour = now.hour
             current_minute = now.minute
 
-            if current_hour == 14 and current_minute < 58 and last_printed_date != current_date:
-                log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب...")
+            if current_hour == 14 and current_minute < 30 and last_printed_date != current_date:
+                log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
                 success = fetch_and_print_shifts()
                 if success:
                     last_printed_date = current_date
@@ -273,16 +268,16 @@ def main():
             time.sleep(20)
 
         except Exception as e:
-            log.error("خطأ في الحلقة:")
+            log.error("خطأ في الحلقة الرئيسية:")
             log.error(traceback.format_exc())
             time.sleep(10)
 
 if __name__ == "__main__":
-    server()
+    server()          # يشتغل الـ web server إذا كان موجود
     try:
         main()
     except KeyboardInterrupt:
-        log.info("إيقاف يدوي")
+        log.info("تم إيقاف البوت يدويًا")
     except Exception as e:
         log.error(f"خطأ فادح: {e}")
-        main()  # إعادة تشغيل
+        log.error(traceback.format_exc())
