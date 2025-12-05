@@ -2,3 +2,4 @@ cloudscraper
 beautifulsoup4
 pytz
 flask
+curl-cffi>=0.7.0b5
