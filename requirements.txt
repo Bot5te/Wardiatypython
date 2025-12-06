@@ -3,4 +3,4 @@ beautifulsoup4
 pytz
 flask
 curl_cffi
-
+fake_useragent
