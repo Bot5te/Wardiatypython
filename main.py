@@ -10,6 +10,8 @@ import time
 import random
 import logging
 import traceback
+from curl_cffi import requests as curl_requests
+from fake_useragent import UserAgent
 from app import server 
 
 # ================= إعداد Logging ليعمل ممتاز على Render =================
@@ -58,22 +60,55 @@ def get_browser_headers(referer=None):
         headers['Referer'] = referer
     return headers
 
+def create_curl_session():
+    """إنشاء جلسة curl_cffi مع محاكاة بصمة المتصفح الحقيقي"""
+    
+    # استخدام بصمات متصفح حقيقية - هذا هو المفتاح لتجاوز الحماية
+    impersonate_options = [
+        "chrome120",
+        "chrome119", 
+        "chrome116",
+        "safari17_0",
+        "safari15_3",
+        "edge120",
+    ]
+    
+    impersonate = random.choice(impersonate_options)
+    log.info(f"استخدام بصمة المتصفح: {impersonate}")
+    
+    session = curl_requests.Session(impersonate=impersonate)
+    
+    return session
+
 def create_enhanced_scraper():
-    """إنشاء scraper محسّن مع إعدادات تجاوز الحماية"""
+    """إنشاء cloudscraper كبديل"""
+    
+    ua = random.choice(USER_AGENTS)
+    
+    browser_configs = [
+        {'browser': 'chrome', 'platform': 'windows', 'desktop': True},
+        {'browser': 'chrome', 'platform': 'darwin', 'desktop': True},
+        {'browser': 'firefox', 'platform': 'windows', 'desktop': True},
+    ]
+    
+    browser_config = random.choice(browser_configs)
+    
     scraper = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'platform': 'windows',
-            'desktop': True,
-            'mobile': False,
-        },
-        delay=random.uniform(3, 7),
-        interpreter='nodejs',
+        browser=browser_config,
+        delay=random.uniform(5, 10),
+        interpreter='native',
+        allow_brotli=False,
+        debug=False,
     )
     
-    # تعيين User-Agent عشوائي
     scraper.headers.update({
-        'User-Agent': random.choice(USER_AGENTS),
+        'User-Agent': ua,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'gzip, deflate',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
     })
     
     return scraper
@@ -140,17 +175,220 @@ def safe_post(scraper, url, **kwargs):
     log.info(f"← {resp.status_code} بعد POST")
     return resp
 
+def fetch_with_curl_cffi():
+    """محاولة الجلب باستخدام curl_cffi - أفضل لتجاوز الحماية"""
+    log.info("=== محاولة باستخدام curl_cffi ===")
+    
+    session = create_curl_session()
+    
+    # تأخير أولي
+    random_delay(3, 6)
+    
+    # طلب صفحة تسجيل الدخول
+    log.info("GET → https://wardyati.com/login/")
+    resp = session.get('https://wardyati.com/login/', timeout=30)
+    log.info(f"← {resp.status_code} من https://wardyati.com/login/")
+    
+    if resp.status_code != 200:
+        log.error(f"فشل الطلب: {resp.status_code}")
+        return None
+    
+    return session, resp
+
+def process_with_curl_session(session, login_page_resp):
+    """معالجة تسجيل الدخول وجلب البيانات باستخدام curl_cffi"""
+    try:
+        soup = BeautifulSoup(login_page_resp.text, 'html.parser')
+        
+        # محاولة إيجاد CSRF token
+        csrf = soup.find('input', {'name': 'csrfmiddlewaretoken'})
+        csrf_token = csrf['value'] if csrf and csrf.get('value') else ''
+        
+        if not csrf_token:
+            # البحث في الـ cookies
+            cookies = session.cookies.get_dict() if hasattr(session.cookies, 'get_dict') else dict(session.cookies)
+            log.info(f"الـ Cookies: {cookies}")
+            if 'csrftoken' in cookies:
+                csrf_token = cookies['csrftoken']
+                log.info(f"تم العثور على csrf token من الـ cookies: {csrf_token[:20]}...")
+        
+        if not csrf_token:
+            log.error("فشل إيجاد CSRF token")
+            return False
+        
+        log.info(f"CSRF Token: {csrf_token[:20]}...")
+        
+        # تأخير قبل تسجيل الدخول
+        random_delay(2, 4)
+        
+        login_data = {
+            'username': 'mm2872564@gmail.com',
+            'password': 'Mm@12345',
+            'csrfmiddlewaretoken': csrf_token,
+        }
+        
+        log.info("POST → https://wardyati.com/login/")
+        login_resp = session.post(
+            'https://wardyati.com/login/',
+            data=login_data,
+            headers={'Referer': 'https://wardyati.com/login/'},
+            allow_redirects=True,
+            timeout=30
+        )
+        log.info(f"← {login_resp.status_code} بعد POST")
+        
+        if login_resp.status_code not in (200, 302) or 'ممنوع' in login_resp.text or '403' in login_resp.text:
+            log.error("فشل تسجيل الدخول")
+            return False
+        
+        log.info("تم تسجيل الدخول بنجاح")
+        
+        # جلب صفحة الغرف
+        random_delay(1, 3)
+        log.info("GET → https://wardyati.com/rooms/")
+        home = session.get('https://wardyati.com/rooms/', timeout=30)
+        log.info(f"← {home.status_code} من https://wardyati.com/rooms/")
+        
+        if home.status_code != 200:
+            return False
+        
+        soup = BeautifulSoup(home.text, 'html.parser')
+        target_text = 'شيفتات جراحة غدد شهر 12'
+        room_link = None
+        for div in soup.find_all('div', class_='overflow-wrap'):
+            if target_text in div.text.strip():
+                card = div.find_parent('div', class_='card-body')
+                if card:
+                    a = card.find('a', class_='stretched-link')
+                    if a:
+                        room_link = urljoin('https://wardyati.com/', a.get('href'))
+                        log.info(f"تم العثور على الغرفة: {room_link}")
+                        break
+        
+        if not room_link:
+            log.error("لم يتم العثور على الغرفة")
+            return False
+        
+        tomorrow = get_egypt_time() + timedelta(days=1)
+        target_date = tomorrow.strftime('%Y-%m-%d')
+        target_year = tomorrow.year
+        target_month = tomorrow.month
+        
+        arena_url = urljoin(room_link, 'arena/')
+        random_delay(1, 2)
+        log.info(f"GET → {arena_url}")
+        arena_resp = session.get(arena_url, params={
+            'view': 'monthly',
+            'year': target_year,
+            'month': target_month
+        }, timeout=30)
+        log.info(f"← {arena_resp.status_code} من {arena_url}")
+        
+        if arena_resp.status_code != 200:
+            return False
+        
+        try:
+            data = json.loads(arena_resp.text)
+            log.info(f"تم جلب بيانات الشهر بنجاح - عدد الأيام: {len(data.get('shift_instances_by_date', {}))}")
+        except Exception as e:
+            log.error(f"فشل تحليل JSON: {e}")
+            return False
+        
+        if target_date not in data.get('shift_instances_by_date', {}):
+            day_name = tomorrow.strftime('%A')
+            formatted = tomorrow.strftime('%d/%m')
+            log.info(f"لا توجد ورديات يوم الغد: {day_name} {formatted}")
+            return True
+        
+        shifts_by_type = {}
+        for shift in data['shift_instances_by_date'][target_date]:
+            shift_type = shift.get('shift_type_name', 'Unknown')
+            details_url = urljoin('https://wardyati.com/', shift['get_shift_instance_details_url'])
+            
+            random_delay(0.5, 1.5)
+            details_resp = session.get(details_url, headers={'HX-Request': 'true'}, timeout=30)
+            
+            if details_resp.status_code != 200:
+                continue
+            
+            try:
+                details = json.loads(details_resp.text)
+                for h in details.get('holdings', []):
+                    name = h.get('apparent_name', 'غير معروف')
+                    phone = ''
+                    member_url = h.get('urls', {}).get('get_member_info')
+                    if member_url:
+                        random_delay(0.3, 1)
+                        mem_resp = session.get(
+                            urljoin('https://wardyati.com/', member_url),
+                            headers={'HX-Request': 'true'},
+                            timeout=30
+                        )
+                        if mem_resp.status_code == 200:
+                            try:
+                                mdata = json.loads(mem_resp.text)
+                                phone = mdata.get('room_member', {}).get('contact_info', '')
+                            except:
+                                pass
+                    shifts_by_type.setdefault(shift_type, []).append({'name': name, 'phone': phone})
+            except Exception as e:
+                log.error(f"خطأ أثناء معالجة تفاصيل الشيفت: {e}")
+        
+        # طباعة النتيجة
+        day_name = tomorrow.strftime('%A')
+        formatted = tomorrow.strftime('%d/%m')
+        log.info(f"\nورديات الغد: {day_name} {formatted}")
+        log.info("=" * 50)
+        
+        order = ['Day', 'Day Work', 'Night']
+        printed = set()
+        
+        for st in order + list(shifts_by_type.keys()):
+            if st in shifts_by_type and st not in printed:
+                log.info(f"\n{st}")
+                seen = set()
+                for p in shifts_by_type[st]:
+                    key = (p['name'], p['phone'])
+                    if key not in seen:
+                        seen.add(key)
+                        log.info(f'"{p["name"]}')
+                        if p['phone']:
+                            log.info(f'({p["phone"]})')
+                printed.add(st)
+        
+        log.info("=" * 50)
+        return True
+        
+    except Exception as e:
+        log.error(f"خطأ في process_with_curl_session: {e}")
+        log.error(traceback.format_exc())
+        return False
+
 def fetch_and_print_shifts():
     log.info("=== بدء جلب ورديات الغد ===")
+    
+    # محاولة curl_cffi أولاً
+    result = None
     try:
-        # استخدام الـ scraper المحسّن
+        result = fetch_with_curl_cffi()
+    except Exception as e:
+        log.warning(f"فشل curl_cffi: {e}")
+    
+    if result:
+        scraper, login_page_resp = result
+        log.info("نجح curl_cffi!")
+        
+        # متابعة باستخدام curl_cffi
+        return process_with_curl_session(scraper, login_page_resp)
+    
+    # محاولة cloudscraper كبديل
+    log.info("=== محاولة باستخدام cloudscraper كبديل ===")
+    try:
         scraper = create_enhanced_scraper()
         log.info(f"تم إنشاء scraper جديد مع User-Agent محسّن")
 
-        # تأخير أولي للمحاكاة البشرية
         random_delay(2, 5)
 
-        # 1. تسجيل الدخول
         login_page = safe_get(scraper, 'https://wardyati.com/login/', referer='https://wardyati.com/')
         if not login_page:
             return False
@@ -320,7 +558,7 @@ def main():
             current_hour = now.hour
             current_minute = now.minute
 
-            if current_hour == 14 and current_minute < 60 and last_printed_date != current_date:
+            if current_hour == 15 and current_minute < 60 and last_printed_date != current_date:
                 log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
                 success = fetch_and_print_shifts()
                 if success:
