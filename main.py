@@ -1,3 +1,5 @@
+
+
 import cloudscraper
 from bs4 import BeautifulSoup
 import json
@@ -9,7 +11,6 @@ import random
 import logging
 import traceback
 from app import server 
-import os
 
 # ================= إعداد Logging ليعمل ممتاز على Render =================
 logging.basicConfig(
@@ -26,6 +27,61 @@ sys.stdout.reconfigure(line_buffering=True)
 # ================= إعدادات إعادة المحاولة =================
 MAX_RETRIES = 5
 BASE_DELAY = 7
+
+# ================= قائمة User-Agents حقيقية =================
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+]
+
+def get_browser_headers(referer=None):
+    """إنشاء headers مشابهة للمتصفح الحقيقي"""
+    headers = {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0',
+        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+    }
+    if referer:
+        headers['Referer'] = referer
+    return headers
+
+def create_enhanced_scraper():
+    """إنشاء scraper محسّن مع إعدادات تجاوز الحماية"""
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True,
+            'mobile': False,
+        },
+        delay=random.uniform(3, 7),
+        interpreter='nodejs',
+    )
+    
+    # تعيين User-Agent عشوائي
+    scraper.headers.update({
+        'User-Agent': random.choice(USER_AGENTS),
+    })
+    
+    return scraper
+
+def random_delay(min_sec=1.0, max_sec=4.0):
+    """تأخير عشوائي للمحاكاة البشرية"""
+    delay = random.uniform(min_sec, max_sec)
+    time.sleep(delay)
 
 def retry(func):
     def wrapper(*args, **kwargs):
@@ -48,154 +104,83 @@ def retry(func):
 def get_egypt_time():
     return datetime.now(pytz.timezone('Africa/Cairo'))
 
-def create_scraper():
-    """إنشاء scraper مع إعدادات مختلفة للبيئات المختلفة"""
-    try:
-        # تحقق إذا كنا على Render
-        is_render = os.environ.get('RENDER', False) or 'render.com' in os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')
-        
-        if is_render:
-            log.info("تشغيل على Render - استخدام إعدادات خاصة")
-            
-            # إعدادات cloudscraper مختلفة لـ Render
-            scraper = cloudscraper.create_scraper(
-                browser={
-                    'browser': 'chrome',
-                    'platform': 'windows',
-                    'desktop': True,
-                },
-                delay=10,
-                interpreter='js2py',  # استخدم js2py بدلاً من nodejs على Render
-                debug=False
-            )
-            
-            # تحديث headers للمظهر أكثر واقعية
-            scraper.headers.update({
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'ar,en-US;q=0.7,en;q=0.3',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-User': '?1',
-                'Cache-Control': 'max-age=0',
-            })
-            
-            # تعيين User-Agent عشوائي
-            user_agents = [
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            ]
-            scraper.headers['User-Agent'] = random.choice(user_agents)
-            
-        else:
-            # إعدادات للتشغيل المحلي
-            log.info("التشغيل محلياً")
-            scraper = cloudscraper.create_scraper()
-        
-        return scraper
-        
-    except Exception as e:
-        log.error(f"خطأ في إنشاء الـ scraper: {e}")
-        # استخدام الـ scraper الأساسي كحل احتياطي
-        return cloudscraper.create_scraper()
-
 @retry
 def safe_get(scraper, url, **kwargs):
     log.info(f"GET → {url} | params={kwargs.get('params')}")
+    # إضافة تأخير عشوائي قبل كل طلب
+    random_delay(0.5, 2)
     
-    # إضافة headers إضافية إذا لزم الأمر
-    headers = kwargs.pop('headers', {})
-    if 'HX-Request' not in headers:
-        headers.update({
-            'Referer': 'https://wardyati.com/',
-            'Origin': 'https://wardyati.com'
-        })
+    # دمج الـ headers الافتراضية مع أي headers مخصصة
+    default_headers = get_browser_headers(kwargs.pop('referer', None))
+    if 'headers' in kwargs:
+        default_headers.update(kwargs['headers'])
+    kwargs['headers'] = default_headers
     
-    resp = scraper.get(url, timeout=30, headers=headers, **kwargs)
+    resp = scraper.get(url, timeout=30, **kwargs)
     log.info(f"← {resp.status_code} من {url}")
-    
-    if resp.status_code == 403:
-        log.warning("حصلنا على 403 - قد نحتاج لتغيير استراتيجية")
-        # إعادة تعيين الـ scraper
-        global current_scraper
-        current_scraper = create_scraper()
-        raise Exception(f"تم حظر الطلب (403). سيتم إعادة المحاولة بمعرّف جديد.")
-    
     resp.raise_for_status()
     return resp
 
 @retry
 def safe_post(scraper, url, **kwargs):
     log.info(f"POST → {url}")
+    # إضافة تأخير عشوائي قبل كل طلب
+    random_delay(1, 3)
     
-    headers = kwargs.pop('headers', {})
-    headers.update({
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Referer': url,
-        'Origin': 'https://wardyati.com'
-    })
+    # دمج الـ headers الافتراضية
+    default_headers = get_browser_headers(kwargs.get('headers', {}).get('Referer'))
+    default_headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    if 'headers' in kwargs:
+        default_headers.update(kwargs['headers'])
+    kwargs['headers'] = default_headers
     
-    resp = scraper.post(url, timeout=30, headers=headers, **kwargs)
-    
-    if resp.status_code in (403, 429):
-        log.error(f"تم حظر الطلب: {resp.status_code}")
-        # إعادة تعيين الـ scraper
-        global current_scraper
-        current_scraper = create_scraper()
-        raise Exception(f"تم حظر الطلب ({resp.status_code}). سيتم إعادة المحاولة.")
-    
+    resp = scraper.post(url, timeout=30, **kwargs)
     if resp.status_code not in (200, 302):
         raise Exception(f"فشل POST: {resp.status_code} | {resp.text[:500]}")
-    
     log.info(f"← {resp.status_code} بعد POST")
     return resp
 
 def fetch_and_print_shifts():
     log.info("=== بدء جلب ورديات الغد ===")
-    
-    # إعادة إنشاء الـ scraper لكل عملية
-    scraper = create_scraper()
-    
     try:
-        # 1. زيارة الصفحة الرئيسية أولاً للحصول على الكوكيز
-        log.info("زيارة الصفحة الرئيسية أولاً...")
-        home_page = safe_get(scraper, 'https://wardyati.com/')
-        if not home_page:
-            log.error("فشل في زيارة الصفحة الرئيسية")
-            return False
-        
-        # 2. الانتظار قليلاً قبل تسجيل الدخول
-        time.sleep(random.uniform(2, 5))
-        
-        # 3. تسجيل الدخول
-        login_page = safe_get(scraper, 'https://wardyati.com/login/')
+        # استخدام الـ scraper المحسّن
+        scraper = create_enhanced_scraper()
+        log.info(f"تم إنشاء scraper جديد مع User-Agent محسّن")
+
+        # تأخير أولي للمحاكاة البشرية
+        random_delay(2, 5)
+
+        # 1. تسجيل الدخول
+        login_page = safe_get(scraper, 'https://wardyati.com/login/', referer='https://wardyati.com/')
         if not login_page:
             return False
 
         soup = BeautifulSoup(login_page.text, 'html.parser')
+        
+        # محاولة إيجاد CSRF token بعدة طرق
         csrf = soup.find('input', {'name': 'csrfmiddlewaretoken'})
-        csrf_token = csrf['value'] if csrf else ''
+        if not csrf:
+            # محاولة البحث عن أي input hidden
+            csrf = soup.find('input', {'type': 'hidden'})
+        
+        csrf_token = csrf['value'] if csrf and csrf.get('value') else ''
         
         if not csrf_token:
-            # محاولة البحث عن التوكن بطريقة أخرى
-            for script in soup.find_all('script'):
-                if 'csrf' in script.text:
-                    import re
-                    matches = re.search(r'csrf_token["\']?\s*:\s*["\']([^"\']+)["\']', script.text)
-                    if matches:
-                        csrf_token = matches.group(1)
-                        break
+            # تسجيل محتوى الصفحة للتشخيص
+            log.error("لم يتم العثور على csrf token")
+            log.error(f"طول الصفحة: {len(login_page.text)} حرف")
+            log.error(f"بداية الصفحة: {login_page.text[:500]}")
             
-            if not csrf_token:
-                log.error("لم يتم العثور على csrf token")
-                log.error(f"محتوى الصفحة: {login_page.text[:2000]}")
-                return False
+            # البحث في الـ cookies
+            cookies = scraper.cookies.get_dict()
+            log.info(f"الـ Cookies: {cookies}")
+            if 'csrftoken' in cookies:
+                csrf_token = cookies['csrftoken']
+                log.info(f"تم العثور على csrf token من الـ cookies: {csrf_token[:20]}...")
+        
+        if not csrf_token:
+            log.error("فشل إيجاد CSRF token نهائياً")
+            return False
 
         login_data = {
             'username': 'mm2872564@gmail.com',
@@ -203,26 +188,16 @@ def fetch_and_print_shifts():
             'csrfmiddlewaretoken': csrf_token,
         }
 
-        # إضافة تأخير عشوائي قبل تسجيل الدخول
-        time.sleep(random.uniform(1, 3))
-        
-        login_resp = safe_post(scraper, 'https://wardyati.com/login/', data=login_data, allow_redirects=True)
-        
-        if not login_resp:
-            log.error("فشل تسجيل الدخول - لا يوجد رد")
+        login_resp = safe_post(scraper, 'https://wardyati.com/login/', data=login_data,
+                               headers={'Referer': 'https://wardyati.com/login/'}, allow_redirects=True)
+        if not login_resp or 'ممنوع' in login_resp.text or '403' in login_resp.text:
+            log.error("فشل تسجيل الدخول - ربما تم حظر الـ IP أو تغيّر الكود")
+            log.error(f"جزء من الرد: {login_resp.text[:1000]}")
             return False
-        
-        # التحقق من نجاح تسجيل الدخول
-        if 'logout' in login_resp.text.lower() or 'profile' in login_resp.text.lower():
-            log.info("تم تسجيل الدخول بنجاح ✓")
-        else:
-            log.warning("قد يكون هناك مشكلة في تسجيل الدخول")
-            log.debug(f"جزء من الرد: {login_resp.text[:1000]}")
-        
-        # الانتظار قبل الانتقال للصفحة التالية
-        time.sleep(random.uniform(2, 4))
 
-        # 4. البحث عن الغرفة
+        log.info("تم تسجيل الدخول بنجاح")
+
+        # باقي الكود كما هو مع إضافة log في كل خطوة مهمة
         home = safe_get(scraper, 'https://wardyati.com/rooms/')
         if not home:
             return False
@@ -230,8 +205,6 @@ def fetch_and_print_shifts():
         soup = BeautifulSoup(home.text, 'html.parser')
         target_text = 'شيفتات جراحة غدد شهر 12'
         room_link = None
-        
-        # البحث بطرق مختلفة
         for div in soup.find_all('div', class_='overflow-wrap'):
             if target_text in div.text.strip():
                 card = div.find_parent('div', class_='card-body')
@@ -241,42 +214,22 @@ def fetch_and_print_shifts():
                         room_link = urljoin('https://wardyati.com/', a.get('href'))
                         log.info(f"تم العثور على الغرفة: {room_link}")
                         break
-        
-        # محاولة بديلة إذا لم يتم العثور
-        if not room_link:
-            log.warning("محاولة البحث عن طريق الروابط مباشرة...")
-            for a in soup.find_all('a', href=True):
-                if 'rooms' in a['href'] and target_text in a.text:
-                    room_link = urljoin('https://wardyati.com/', a['href'])
-                    log.info(f"تم العثور على الغرفة (الطريقة البديلة): {room_link}")
-                    break
 
         if not room_link:
-            log.error(f"لم يتم العثور على الغرفة - تأكد من النص '{target_text}'")
-            log.error(f"الأقسام الموجودة: {[div.text[:50] for div in soup.find_all('div', class_='overflow-wrap')[:3]]}")
+            log.error("لم يتم العثور على الغرفة - تأكد من النص 'شيفتات جراحة غدد شهر 12'")
             return False
 
-        # 5. جلب بيانات الورديات
         tomorrow = get_egypt_time() + timedelta(days=1)
         target_date = tomorrow.strftime('%Y-%m-%d')
         target_year = tomorrow.year
         target_month = tomorrow.month
 
         arena_url = urljoin(room_link, 'arena/')
-        
-        # إضافة headers خاصة لطلبات AJAX
-        headers = {
-            'HX-Request': 'true',
-            'HX-Current-URL': room_link,
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-        
         arena_resp = safe_get(scraper, arena_url, params={
             'view': 'monthly',
             'year': target_year,
             'month': target_month
-        }, headers=headers)
-        
+        })
         if not arena_resp:
             return False
 
@@ -294,27 +247,13 @@ def fetch_and_print_shifts():
             log.info(f"لا توجد ورديات يوم الغد: {day_name} {formatted}")
             return True
 
-        # 6. جلب تفاصيل كل وردية
+        # باقي الكود مع try/except حول كل جزء حساس
         shifts_by_type = {}
-        shifts_count = len(data['shift_instances_by_date'][target_date])
-        log.info(f"جاري جلب تفاصيل {shifts_count} وردية...")
-        
-        for i, shift in enumerate(data['shift_instances_by_date'][target_date], 1):
+        for shift in data['shift_instances_by_date'][target_date]:
             shift_type = shift.get('shift_type_name', 'Unknown')
             details_url = urljoin('https://wardyati.com/', shift['get_shift_instance_details_url'])
-            
-            log.info(f"جلب وردية {i}/{shifts_count}: {shift_type}")
-            
-            # تأخير عشوائي بين الطلبات
-            if i < shifts_count:
-                time.sleep(random.uniform(1, 2))
-            
-            details_resp = safe_get(scraper, details_url, headers={
-                'HX-Request': 'true',
-                'HX-Current-URL': arena_url,
-                'X-Requested-With': 'XMLHttpRequest'
-            })
-            
+
+            details_resp = safe_get(scraper, details_url, headers={'HX-Request': 'true'})
             if not details_resp:
                 continue
 
@@ -323,58 +262,43 @@ def fetch_and_print_shifts():
                 for h in details.get('holdings', []):
                     name = h.get('apparent_name', 'غير معروف')
                     phone = ''
-                    
-                    # جلب معلومات العضو إذا كان هناك رابط
                     member_url = h.get('urls', {}).get('get_member_info')
                     if member_url:
-                        # تأخير صغير قبل طلب معلومات العضو
-                        time.sleep(random.uniform(0.5, 1))
-                        
                         mem_resp = safe_get(scraper, urljoin('https://wardyati.com/', member_url),
-                                          headers={
-                                              'HX-Request': 'true',
-                                              'X-Requested-With': 'XMLHttpRequest'
-                                          })
+                                            headers={'HX-Request': 'true'})
                         if mem_resp:
                             try:
                                 mdata = json.loads(mem_resp.text)
                                 phone = mdata.get('room_member', {}).get('contact_info', '')
                             except:
-                                log.warning(f"فشل تحويل JSON لمعلومات العضو: {name}")
-                    
+                                pass
                     shifts_by_type.setdefault(shift_type, []).append({'name': name, 'phone': phone})
-                    
             except Exception as e:
-                log.error(f"خطأ أثناء معالجة تفاصيل الشيفت {i}: {e}")
-                continue
+                log.error(f"خطأ أثناء معالجة تفاصيل الشيفت: {e}")
 
-        # 7. طباعة النتيجة النهائية
+        # طباعة النتيجة النهائية
         day_name = tomorrow.strftime('%A')
         formatted = tomorrow.strftime('%d/%m')
-        log.info(f"\n" + "="*60)
-        log.info(f"ورديات الغد: {day_name} {formatted}")
-        log.info("="*60)
+        log.info(f"\nورديات الغد: {day_name} {formatted}")
+        log.info("=" * 50)
 
         order = ['Day', 'Day Work', 'Night']
         printed = set()
 
         for st in order + list(shifts_by_type.keys()):
             if st in shifts_by_type and st not in printed:
-                log.info(f"\n{st}:")
+                log.info(f"\n{st}")
                 seen = set()
                 for p in shifts_by_type[st]:
                     key = (p['name'], p['phone'])
                     if key not in seen:
                         seen.add(key)
+                        log.info(f'"{p["name"]}')
                         if p['phone']:
-                            log.info(f'  • {p["name"]} ({p["phone"]})')
-                        else:
-                            log.info(f'  • {p["name"]}')
+                            log.info(f'({p["phone"]})')
                 printed.add(st)
 
-        log.info("="*60)
-        log.info(f"تم جلب {sum(len(v) for v in shifts_by_type.values())} اسم بنجاح ✓")
-        
+        log.info("=" * 50)
         return True
 
     except Exception as e:
@@ -384,9 +308,8 @@ def fetch_and_print_shifts():
 
 # ================= الحلقة الرئيسية =================
 def main():
-    log.info("="*70)
-    log.info("بوت ورديات الغد شغال الآن - يطبع ورديات الغد يوميًا الساعة 2:30 مساءً")
-    log.info("="*70)
+    log.info("البوت شغال الآن - يطبع ورديات الغد يوميًا")
+    log.info("-" * 70)
 
     last_printed_date = None
 
@@ -396,48 +319,29 @@ def main():
             current_date = now.strftime('%Y-%m-%d')
             current_hour = now.hour
             current_minute = now.minute
-            
-            # تسجيل الوقت الحالي
-            if now.minute % 30 == 0:  # كل 30 دقيقة
-                log.info(f"[{now.strftime('%H:%M:%S')}] البوت شغال...")
 
-            # تشغيل الساعة 2:30 مساءً
-            if (current_hour == 1 and current_minute >= 3) or \
-               (current_hour == 15 and current_minute < 5):
-                if last_printed_date != current_date:
-                    log.info(f"[{now.strftime('%H:%M:%S')}] ⏰ وقت جلب ورديات الغد...")
-                    success = fetch_and_print_shifts()
-                    if success:
-                        last_printed_date = current_date
-                        log.info("تمت العملية بنجاح ✓")
-                    else:
-                        log.error("فشلت العملية، سيتم إعادة المحاولة غداً ✗")
-                    
-                    log.info("-" * 60)
-                    
-                    # الانتظار حتى تمر الساعة 3:05 قبل التحقق مجدداً
-                    time.sleep(60 * 35)
-            
-            # فحص كل دقيقة
-            time.sleep(60)
+            if current_hour == 14 and current_minute < 60 and last_printed_date != current_date:
+                log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
+                success = fetch_and_print_shifts()
+                if success:
+                    last_printed_date = current_date
+                log.info("-" * 60)
 
-        except KeyboardInterrupt:
-            log.info("\nتم إيقاف البوت يدويًا")
-            break
+            time.sleep(20)
+
         except Exception as e:
             log.error("خطأ في الحلقة الرئيسية:")
             log.error(traceback.format_exc())
-            time.sleep(60)  # انتظار دقيقة قبل إعادة المحاولة
+            time.sleep(10)
 
 if __name__ == "__main__":
-    # تشغيل خادم ويب إذا كان موجوداً
-    try:
-        server()
-    except:
-        log.info("لا يوجد خادم ويب، التشغيل في وضع CLI فقط")
-    
+    server()          # يشتغل الـ web server إذا كان موجود
     try:
         main()
+    except KeyboardInterrupt:
+        log.info("تم إيقاف البوت يدويًا")
     except Exception as e:
         log.error(f"خطأ فادح: {e}")
         log.error(traceback.format_exc())
+
+
