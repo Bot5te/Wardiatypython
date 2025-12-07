@@ -566,7 +566,7 @@ def process_with_curl_session(session, login_page_resp, retry_stats):
             return False, None, retry_stats
         
         soup = BeautifulSoup(home.text, 'html.parser')
-        target_text = 'شيفتات جراحة غدد شهر 12'
+        target_text = 'COLORECTAL DEC'
         room_link = None
         
         for div in soup.find_all('div', class_='overflow-wrap'):
