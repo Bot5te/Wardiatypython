@@ -876,7 +876,7 @@ def main():
             # التحقق مما إذا تمت معالجة اليوم بالفعل
             if check_if_already_processed(tomorrow_date):
                 log.info(f"[{now.strftime('%H:%M:%S')}] ورديات يوم {tomorrow_date} تمت معالجتها مسبقاً - تخطي")
-                time.sleep(20)
+                time.sleep(90)
                 continue
 
             if current_hour == 12 and current_minute < 60 and last_execution_date != current_date:
