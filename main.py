@@ -879,7 +879,7 @@ def main():
                 time.sleep(90)
                 continue
 
-            if current_hour == 20 and current_minute < 60 and last_execution_date != current_date:
+            if current_hour == 22 and current_minute < 60 and last_execution_date != current_date:
                 log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد ({tomorrow_date})...")
                 
                 success, shifts_data, retry_stats = fetch_and_print_shifts_with_retry()
